@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pallet Packing Planner</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+  min-height: 100vh;
+  font-size: 14px;
+}
+
+/* ── Header ── */
+header {
+  background: #1a2340;
+  color: #fff;
+  padding: 0 20px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.header-brand { font-size: 1rem; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+.header-nav { display: flex; gap: 4px; flex: 1; justify-content: center; }
+.nav-btn {
+  padding: 6px 22px;
+  border: none; border-radius: 6px;
+  font-size: .85rem; font-weight: 600;
+  cursor: pointer; letter-spacing: .02em;
+  background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.65);
+  transition: all .15s;
+}
+.nav-btn.active { background: #fff; color: #1a2340; }
+.nav-btn:hover:not(.active) { background: rgba(255,255,255,.2); color: #fff; }
+.header-actions { display: flex; gap: 8px; }
+.btn-hdr {
+  padding: 7px 16px; border-radius: 6px;
+  font-size: .82rem; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+  border: none; white-space: nowrap;
+}
+.btn-hdr-save { background: #4f6ef7; color: #fff; }
+.btn-hdr-save:hover { background: #3a56d4; }
+.btn-hdr-export { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+.btn-hdr-export:hover { background: rgba(255,255,255,.24); }
+
+/* ── Tab Content ── */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Packing Layout ── */
+.packing-layout {
+  display: grid;
+  grid-template-columns: 310px 1fr;
+  height: calc(100vh - 52px);
+}
+.sidebar {
+  background: #fff;
+  border-right: 1px solid #e8e8e8;
+  overflow-y: auto;
+  padding: 14px 14px 20px;
+  height: 100%;
+}
+.main-content { overflow-y: auto; padding: 16px; height: 100%; }
+
+/* ── Form ── */
+.sec-title {
+  font-size: .67rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .09em; color: #7a8aaa;
+  margin: 16px 0 8px; padding-bottom: 4px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.sec-title:first-child { margin-top: 0; }
+label { display: block; font-size: .77rem; font-weight: 500; color: #555; margin-bottom: 3px; }
+input[type=number], input[type=text], select {
+  width: 100%; padding: 6px 8px;
+  border: 1.5px solid #e0e0e0; border-radius: 6px;
+  font-size: .84rem; margin-bottom: 7px; outline: none;
+  background: #fafafa; font-family: inherit;
+  transition: border-color .15s;
+}
+input:focus, select:focus { border-color: #4f6ef7; background: #fff; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+
+/* ── Orientation ── */
+.orient-row { display: flex; gap: 4px; margin-bottom: 8px; }
+.orient-btn {
+  flex: 1; padding: 5px 4px; border-radius: 6px;
+  font-size: .75rem; font-weight: 600; cursor: pointer;
+  border: 1.5px solid #e0e0e0; background: #fafafa; color: #666;
+  transition: all .12s; text-align: center;
+}
+.orient-btn.active { background: #4f6ef7; color: #fff; border-color: #4f6ef7; }
+
+/* ── Calc Button ── */
+.btn-calc {
+  width: 100%; padding: 10px;
+  background: #1a2340; color: #fff;
+  border: none; border-radius: 8px;
+  font-size: .93rem; font-weight: 700;
+  cursor: pointer; margin-top: 8px;
+  transition: background .15s;
+}
+.btn-calc:hover { background: #2e3f6e; }
+
+/* ── Carton Type Cards ── */
+.carton-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.carton-card { border: 1.5px solid #e8e8e8; border-radius: 8px; overflow: hidden; }
+.carton-card-header {
+  display: flex; align-items: center;
+  padding: 7px 10px; gap: 7px;
+  background: #fafafa;
+}
+.color-swatch {
+  width: 14px; height: 14px; border-radius: 4px;
+  flex-shrink: 0; border: 1px solid rgba(0,0,0,.1);
+}
+.carton-name-inp {
+  flex: 1; border: none; background: transparent;
+  font-size: .84rem; font-weight: 700; color: #1a2340;
+  padding: 0; margin: 0; outline: none; min-width: 0;
+}
+.btn-rm {
+  background: none; border: none; cursor: pointer;
+  color: #ccc; font-size: .9rem; padding: 2px 5px;
+  border-radius: 4px; transition: all .12s; line-height: 1;
+}
+.btn-rm:hover { color: #e84f4f; background: #fff0f0; }
+.carton-card-body { padding: 8px 10px; border-top: 1px solid #f0f0f0; }
+.btn-add-carton {
+  width: 100%; padding: 7px;
+  border: 1.5px dashed #c8d4f8;
+  border-radius: 8px; background: #f5f7ff;
+  color: #4f6ef7; font-size: .82rem; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.btn-add-carton:hover { border-color: #4f6ef7; background: #eef1ff; }
+
+/* ── Overview Card ── */
+.overview-card {
+  background: #fff; border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.overview-card h3, .detail-card h3 {
+  font-size: .7rem; font-weight: 700; color: #7a8aaa;
+  text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px;
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.stat {
+  background: #f5f7fb; border-radius: 7px;
+  padding: 9px 12px; border-left: 3px solid #4f6ef7;
+}
+.stat.ok   { border-left-color: #4fcf70; }
+.stat.warn { border-left-color: #f7a444; }
+.stat-val   { font-size: 1.15rem; font-weight: 800; color: #1a2340; line-height: 1; }
+.stat-label { font-size: .67rem; color: #888; margin-top: 3px; }
+
+/* ── Pallets Grid ── */
+.pallets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* ── Pallet Card ── */
+.pcard {
+  background: #fff; border-radius: 10px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.09); overflow: hidden;
+}
+.pcard-header {
+  background: #1a2340; color: #fff;
+  padding: 9px 13px;
+  display: flex; align-items: center; gap: 7px;
+}
+.pnum { font-size: .93rem; font-weight: 800; flex: 1; }
+.pnum span { font-size: .7rem; font-weight: 400; opacity: .6; }
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 9px; border-radius: 20px;
+  font-size: .68rem; font-weight: 700; letter-spacing: .03em;
+}
+.badge-full    { background: #4fcf70; color: #0a3d1a; }
+.badge-partial { background: #f7a444; color: #5a2e00; }
+.badge-blue    { background: rgba(79,110,247,.25); color: #a0bcff; border: 1px solid rgba(79,110,247,.3); }
+
+.pcard-views { display: flex; border-bottom: 1px solid #f0f0f0; }
+.pcard-view { flex: 1; padding: 10px 10px 6px; border-right: 1px solid #f0f0f0; }
+.pcard-view:last-child { border-right: none; }
+.view-label {
+  font-size: .63rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: #bbb; margin-bottom: 6px;
+}
+canvas { display: block; }
+
+.pcard-3d { padding: 8px 10px 6px; border-bottom: 1px solid #f0f0f0; }
+
+.pcard-legend {
+  padding: 7px 12px; display: flex; flex-wrap: wrap; gap: 6px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: .7rem; color: #555; font-weight: 500;
+}
+.legend-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+.pcard-stats {
+  padding: 9px 12px; display: flex; flex-wrap: wrap; gap: 6px;
+}
+.chip {
+  display: inline-flex; flex-direction: column;
+  padding: 5px 10px; background: #f5f7fb;
+  border-radius: 6px; min-width: 66px;
+}
+.chip-val   { font-size: .88rem; font-weight: 700; color: #1a2340; }
+.chip-label { font-size: .6rem; color: #999; margin-top: 1px; }
+
+.pcard-breakdown {
+  padding: 7px 12px; display: flex; flex-wrap: wrap; gap: 5px;
+  border-top: 1px solid #f0f0f0;
+}
+.ct-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: .7rem; font-weight: 600;
+}
+.ct-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Detail Table ── */
+.detail-card {
+  background: #fff; border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+th {
+  background: #f5f7fb; text-align: left; padding: 7px 11px;
+  font-size: .68rem; color: #888; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+td { padding: 7px 11px; border-bottom: 1px solid #f0f0f0; color: #333; }
+tr:last-child td { border-bottom: none; }
+
+/* ── Placeholder ── */
+.placeholder {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  height: 65vh; color: #bbb; text-align: center;
+}
+.placeholder-icon { font-size: 3.5rem; margin-bottom: 14px; opacity: .5; }
+.placeholder p { font-size: .9rem; }
+
+/* ── Records Page ── */
+.records-page { padding: 22px; max-width: 860px; margin: 0 auto; }
+.records-page h2 {
+  font-size: 1.05rem; font-weight: 700; color: #1a2340;
+  margin-bottom: 16px; padding-bottom: 10px;
+  border-bottom: 1px solid #e8e8e8;
+}
+.records-list { display: flex; flex-direction: column; gap: 10px; }
+.record-item {
+  background: #fff; border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  display: flex; align-items: center; gap: 14px;
+  transition: box-shadow .15s, transform .15s;
+}
+.record-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); }
+.rec-icon { font-size: 1.6rem; flex-shrink: 0; }
+.rec-info { flex: 1; min-width: 0; }
+.rec-name { font-weight: 700; font-size: .95rem; color: #1a2340; }
+.rec-meta { font-size: .73rem; color: #888; margin-top: 3px; }
+.rec-actions { display: flex; gap: 7px; flex-shrink: 0; }
+.btn-rec {
+  padding: 6px 14px; border-radius: 6px;
+  font-size: .78rem; font-weight: 600;
+  cursor: pointer; transition: all .15s; border: 1.5px solid;
+}
+.btn-rec-load { border-color: #4f6ef7; background: #fff; color: #4f6ef7; }
+.btn-rec-load:hover { background: #4f6ef7; color: #fff; }
+.btn-rec-del { border-color: #e0e0e0; background: #fff; color: #aaa; }
+.btn-rec-del:hover { border-color: #e84f4f; color: #e84f4f; }
+.empty-records { text-align: center; color: #bbb; padding: 70px 0; font-size: .9rem; line-height: 1.6; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.modal {
+  background: #fff; border-radius: 12px;
+  padding: 24px; width: 360px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  animation: modal-in .15s ease;
+}
+@keyframes modal-in { from { opacity: 0; transform: translateY(-8px) scale(.98); } }
+.modal h2 { font-size: .95rem; font-weight: 700; margin-bottom: 14px; color: #1a2340; }
+.modal-input {
+  width: 100%; padding: 9px 12px;
+  border: 1.5px solid #e0e0e0; border-radius: 8px;
+  font-size: .9rem; outline: none;
+  font-family: inherit; margin-bottom: 16px;
+  transition: border-color .15s;
+}
+.modal-input:focus { border-color: #4f6ef7; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-cancel {
+  padding: 8px 16px; border-radius: 7px;
+  border: 1.5px solid #e0e0e0; background: #fff;
+  color: #666; font-size: .84rem; font-weight: 600; cursor: pointer;
+}
+.btn-confirm {
+  padding: 8px 16px; border-radius: 7px;
+  border: none; background: #4f6ef7;
+  color: #fff; font-size: .84rem; font-weight: 600; cursor: pointer;
+  transition: background .15s;
+}
+.btn-confirm:hover { background: #3a56d4; }
+
+@media print {
+  header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sidebar { display: none; }
+  .packing-layout { grid-template-columns: 1fr; height: auto; }
+  .main-content { height: auto; overflow: visible; }
+  .pallets-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="header-brand">Pallet Packing Planner</div>
+  <nav class="header-nav">
+    <button id="nav-packing" class="nav-btn active" onclick="showTab('packing')">Packing</button>
+    <button id="nav-records" class="nav-btn" onclick="showTab('records')">Records</button>
+  </nav>
+  <div class="header-actions">
+    <button class="btn-hdr btn-hdr-export" onclick="exportPlan()">Export</button>
+    <button id="btn-save" class="btn-hdr btn-hdr-save" onclick="openSaveModal()">Save</button>
+  </div>
+</header>
+
+<!-- ── Save Modal ── -->
+<div id="save-modal" class="modal-overlay" style="display:none" onclick="handleModalBg(event)">
+  <div class="modal">
+    <h2>Save Packing Plan</h2>
+    <input id="save-name" class="modal-input" type="text"
+      placeholder="e.g. PO-1234 Samsung Shipment"
+      onkeydown="if(event.key==='Enter')confirmSave()">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSaveModal()">Cancel</button>
+      <button class="btn-confirm" onclick="confirmSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Packing Tab ── -->
+<div id="tab-packing" class="tab-content active">
+  <div class="packing-layout">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <div class="sec-title">Pallet</div>
+      <label>Pallet Type</label>
+      <select id="pallet-preset" onchange="applyPreset()">
+        <option value="sq1100">1100 × 1100 mm (ISO / Asia-Pacific)</option>
+        <option value="eur">EUR / EPAL (1200 × 800 mm)</option>
+        <option value="eur2">EUR2 (1200 × 1000 mm)</option>
+        <option value="us">US Standard (48×40 in → 1219×1016 mm)</option>
+        <option value="custom">Custom</option>
+      </select>
+      <div class="row2">
+        <div><label>Length (mm)</label><input id="p-l" type="number" value="1100" min="100"></div>
+        <div><label>Width (mm)</label><input id="p-w" type="number" value="1100" min="100"></div>
+      </div>
+      <div class="row2">
+        <div><label>Height (mm)</label><input id="p-h" type="number" value="144" min="50"></div>
+        <div><label>Max Load (kg)</label><input id="p-maxkg" type="number" value="1000" min="1"></div>
+      </div>
+      <div class="row2">
+        <div><label>Max Stack (mm)</label><input id="p-maxh" type="number" value="2200" min="200"></div>
+        <div><label>Overhang (mm)</label><input id="p-overhang" type="number" value="0" min="0" max="100"></div>
+      </div>
+
+      <div class="sec-title">Carton Types</div>
+      <div class="carton-list" id="carton-list"></div>
+      <button class="btn-add-carton" onclick="addCartonType()">+ Add Carton Type</button>
+
+      <div class="sec-title">Arrangement</div>
+      <label>Box Orientation</label>
+      <div class="orient-row">
+        <div class="orient-btn active" id="or-auto" onclick="setOrient('auto')">Auto Best</div>
+        <div class="orient-btn" id="or-a" onclick="setOrient('a')">L × W</div>
+        <div class="orient-btn" id="or-b" onclick="setOrient('b')">W × L</div>
+      </div>
+      <div class="row2">
+        <div><label>Gap (mm)</label><input id="gap" type="number" value="5" min="0" max="50"></div>
+        <div><label>Wrap Margin (mm)</label><input id="wrap" type="number" value="0" min="0" max="50"></div>
+      </div>
+
+      <div class="sec-title">Shipment Info</div>
+      <div class="row2">
+        <div><label>Shipper</label><input id="shipper" type="text" placeholder="Company"></div>
+        <div><label>Consignee</label><input id="consignee" type="text" placeholder="Receiver"></div>
+      </div>
+      <div class="row2">
+        <div><label>Destination</label><input id="dest" type="text" placeholder="Port / Country"></div>
+        <div><label>PO / Ref No.</label><input id="ref" type="text" placeholder="PO-12345"></div>
+      </div>
+
+      <button class="btn-calc" onclick="calculate()">Calculate &amp; Draw</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="main-content">
+      <div class="placeholder" id="placeholder">
+        <div class="placeholder-icon">&#x1F4E6;</div>
+        <p>Configure carton types and pallet settings,<br>then press <strong>Calculate &amp; Draw</strong></p>
+      </div>
+      <div id="result" style="display:none"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Records Tab ── -->
+<div id="tab-records" class="tab-content">
+  <div class="records-page">
+    <h2>Saved Packing Plans</h2>
+    <div id="records-container"></div>
+  </div>
+</div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const COLORS = [
+  { fill:'#4f6ef7', front:'#3a56d4', right:'#2a44b8', name:'Blue'   },
+  { fill:'#e85d5d', front:'#c43030', right:'#a82020', name:'Red'    },
+  { fill:'#10b39a', front:'#0a8c78', right:'#067060', name:'Teal'   },
+  { fill:'#f7a44f', front:'#d47820', right:'#b85c00', name:'Orange' },
+  { fill:'#a46cf7', front:'#7840d4', right:'#5a28b0', name:'Purple' },
+  { fill:'#5cbf5c', front:'#3d9e3d', right:'#2a7a2a', name:'Green'  },
+  { fill:'#f76e9e', front:'#d44070', right:'#b02050', name:'Pink'   },
+  { fill:'#4fb0e0', front:'#3090c0', right:'#1870a0', name:'Sky'    },
+];
+
+const PRESETS = {
+  sq1100:{ l:1100,w:1100,h:144 },
+  eur:   { l:1200,w:800, h:144 },
+  eur2:  { l:1200,w:1000,h:144 },
+  us:    { l:1219,w:1016,h:140 },
+  custom:null,
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+
+let orientMode = 'auto';
+let cartonTypes = [];
+let nextCID = 1;
+let currentResults = null;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const gv = id => parseFloat(document.getElementById(id).value) || 0;
+const gs = id => (document.getElementById(id).value || '').trim();
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+window.addEventListener('load', () => {
+  addCartonType({ name:'Carton A', l:400, w:300, h:250, kg:12, qty:72 });
+  renderRecords();
+});
+
+// ─── Tab ──────────────────────────────────────────────────────────────────────
+
+function showTab(tab) {
+  ['packing','records'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('active', t===tab);
+    document.getElementById(`nav-${t}`).classList.toggle('active', t===tab);
+  });
+  if (tab==='records') renderRecords();
+}
+
+// ─── Preset ───────────────────────────────────────────────────────────────────
+
+function applyPreset() {
+  const p = PRESETS[document.getElementById('pallet-preset').value];
+  if (!p) return;
+  document.getElementById('p-l').value = p.l;
+  document.getElementById('p-w').value = p.w;
+  document.getElementById('p-h').value = p.h;
+}
+
+function setOrient(m) {
+  orientMode = m;
+  ['auto','a','b'].forEach(k => document.getElementById('or-'+k).classList.toggle('active',k===m));
+}
+
+// ─── Carton Types ─────────────────────────────────────────────────────────────
+
+function addCartonType(data) {
+  const id   = nextCID++;
+  const cidx = cartonTypes.length % COLORS.length;
+  cartonTypes.push({
+    id,
+    cidx,
+    name: data?.name || `Carton ${String.fromCharCode(64+id)}`,
+    l:    data?.l    ?? 400,
+    w:    data?.w    ?? 300,
+    h:    data?.h    ?? 250,
+    kg:   data?.kg   ?? 12,
+    qty:  data?.qty  ?? 0,
+  });
+  renderCartonList();
+}
+
+function removeCartonType(id) {
+  if (cartonTypes.length <= 1) { alert('At least one carton type is required.'); return; }
+  cartonTypes = cartonTypes.filter(c => c.id !== id);
+  renderCartonList();
+}
+
+function setCF(id, field, val) {
+  const ct = cartonTypes.find(c => c.id === id);
+  if (!ct) return;
+  ct[field] = field==='name' ? val : (parseFloat(val)||0);
+}
+
+function renderCartonList() {
+  document.getElementById('carton-list').innerHTML = cartonTypes.map(ct => {
+    const col = COLORS[ct.cidx];
+    return `
+      <div class="carton-card">
+        <div class="carton-card-header">
+          <div class="color-swatch" style="background:${col.fill}"></div>
+          <input class="carton-name-inp" type="text" value="${ct.name}"
+            oninput="setCF(${ct.id},'name',this.value)">
+          <button class="btn-rm" onclick="removeCartonType(${ct.id})" title="Remove">&#10005;</button>
+        </div>
+        <div class="carton-card-body">
+          <div class="row3">
+            <div><label>L (mm)</label><input type="number" value="${ct.l}" min="1" oninput="setCF(${ct.id},'l',this.value)"></div>
+            <div><label>W (mm)</label><input type="number" value="${ct.w}" min="1" oninput="setCF(${ct.id},'w',this.value)"></div>
+            <div><label>H (mm)</label><input type="number" value="${ct.h}" min="1" oninput="setCF(${ct.id},'h',this.value)"></div>
+          </div>
+          <div class="row2">
+            <div><label>Weight (kg)</label><input type="number" value="${ct.kg}" min="0.01" step="0.1" oninput="setCF(${ct.id},'kg',this.value)"></div>
+            <div><label>Qty</label><input type="number" value="${ct.qty}" min="0" oninput="setCF(${ct.id},'qty',this.value)"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Packing Algorithm ────────────────────────────────────────────────────────
+
+function computeLayout(pL, pW, bL, bW, gap, overhang) {
+  const effL = pL + overhang*2, effW = pW + overhang*2;
+  const fit = (bl,bw) => {
+    const nx = Math.floor((effL+gap)/(bl+gap));
+    const ny = Math.floor((effW+gap)/(bw+gap));
+    return { nx, ny, count:nx*ny, bl, bw };
+  };
+  const a=fit(bL,bW), b=fit(bW,bL);
+  if (orientMode==='a') return a;
+  if (orientMode==='b') return b;
+  return a.count>=b.count?a:b;
+}
+
+function packPallets(pCfg, ctypes) {
+  const { pL,pW,pH,maxH,maxKg,overhang,gap,wrap } = pCfg;
+
+  // Compute best layout per carton type
+  const ctLayouts = ctypes.map(ct => computeLayout(pL,pW,ct.l,ct.w,gap,overhang));
+
+  // Build flat list of layer tasks (one task = one layer of one carton type)
+  const tasks = [];
+  ctypes.forEach((ct,ci) => {
+    const lay = ctLayouts[ci];
+    if (lay.count===0) return;
+    let rem = ct.qty;
+    while (rem>0) {
+      const boxes = Math.min(lay.count, rem);
+      tasks.push({ ci, boxes, full:boxes===lay.count, lay, bH:ct.h, bKg:ct.kg });
+      rem -= boxes;
+    }
+  });
+
+  // Fill pallets
+  const pallets = [];
+  let curLayers=[], curH=pH+wrap*2, curKg=0;
+
+  const flush = () => {
+    if (curLayers.length===0) return;
+    pallets.push({ idx:pallets.length+1, layers:curLayers, totalH:curH, totalKg:curKg });
+    curLayers=[]; curH=pH+wrap*2; curKg=0;
+  };
+
+  for (const task of tasks) {
+    if (curLayers.length>0 && (curH+task.bH>maxH || curKg+task.boxes*task.bKg>maxKg)) flush();
+    curLayers.push(task);
+    curH += task.bH;
+    curKg += task.boxes*task.bKg;
+  }
+  flush();
+
+  // Annotate
+  pallets.forEach(p => {
+    p.cbm = (pL/1000)*(pW/1000)*(p.totalH/1000);
+    p.totalBoxes = p.layers.reduce((s,l)=>s+l.boxes,0);
+    p.ctBreakdown = {};
+    p.layers.forEach(l => { p.ctBreakdown[l.ci]=(p.ctBreakdown[l.ci]||0)+l.boxes; });
+  });
+
+  return { pallets, ctLayouts };
+}
+
+// ─── Calculate ────────────────────────────────────────────────────────────────
+
+function calculate() {
+  const pL=gv('p-l'),pW=gv('p-w'),pH=gv('p-h');
+  const maxH=gv('p-maxh'),maxKg=gv('p-maxkg');
+  const overhang=gv('p-overhang'),gap=gv('gap'),wrap=gv('wrap');
+
+  if (!pL||!pW||!pH) { alert('Please fill pallet dimensions.'); return; }
+
+  const ctSnap = cartonTypes.map(ct=>({...ct}));
+  for (const ct of ctSnap) {
+    if (!ct.l||!ct.w||!ct.h) { alert(`"${ct.name}" has incomplete dimensions.`); return; }
+  }
+  const hasQty = ctSnap.some(ct=>ct.qty>0);
+  if (!hasQty) { alert('Please enter a quantity for at least one carton type.'); return; }
+
+  const pCfg = {pL,pW,pH,maxH,maxKg,overhang,gap,wrap};
+  const { pallets, ctLayouts } = packPallets(pCfg, ctSnap);
+
+  for (let i=0;i<ctSnap.length;i++) {
+    if (ctSnap[i].qty>0 && ctLayouts[i].count===0) {
+      alert(`"${ctSnap[i].name}" cannot fit on the pallet. Check dimensions.`); return;
+    }
+  }
+
+  if (pallets.length===0) { alert('Nothing to pack. Ensure quantities are set.'); return; }
+
+  const shipment = { shipper:gs('shipper'),consignee:gs('consignee'),dest:gs('dest'),ref:gs('ref') };
+  currentResults = { pCfg, pallets, ctypes:ctSnap, shipment, ctLayouts };
+
+  document.getElementById('placeholder').style.display='none';
+  document.getElementById('result').style.display='block';
+  renderResults(currentResults);
+}
+
+// ─── Render Results ───────────────────────────────────────────────────────────
+
+function renderResults(res) {
+  const { pCfg, pallets, ctypes, shipment, ctLayouts } = res;
+  const { pL,pW,pH,maxH,maxKg } = pCfg;
+
+  const totalBoxes = pallets.reduce((s,p)=>s+p.totalBoxes,0);
+  const totalKg    = pallets.reduce((s,p)=>s+p.totalKg,0);
+  const totalCBM   = pallets.reduce((s,p)=>s+p.cbm,0);
+  const activeCtypes = ctypes.filter(ct=>ct.qty>0);
+
+  let html = `
+  <div class="overview-card">
+    <h3>Shipment Overview</h3>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-val">${pallets.length}</div><div class="stat-label">Total Pallets</div></div>
+      <div class="stat ok"><div class="stat-val">${totalBoxes}</div><div class="stat-label">Total Cartons</div></div>
+      <div class="stat ok"><div class="stat-val">${totalKg.toFixed(1)} kg</div><div class="stat-label">Total Gross Wt</div></div>
+      <div class="stat"><div class="stat-val">${totalCBM.toFixed(3)} m³</div><div class="stat-label">Total CBM</div></div>
+      <div class="stat"><div class="stat-val">${activeCtypes.length}</div><div class="stat-label">Carton Types</div></div>
+    </div>
+  </div>
+  <div class="pallets-grid">`;
+
+  pallets.forEach(p => {
+    const isPartial = p.layers.some(l=>!l.full);
+    const bkItems = Object.entries(p.ctBreakdown).map(([ci,boxes]) => {
+      const ct=ctypes[parseInt(ci)]; const col=COLORS[ct.cidx];
+      return `<span class="ct-badge" style="background:${col.fill}18;border:1px solid ${col.fill}30">
+        <span class="ct-dot" style="background:${col.fill}"></span>
+        <span style="color:${col.front}">${ct.name}: ${boxes}</span>
+      </span>`;
+    }).join('');
+    const legendItems = Object.keys(p.ctBreakdown).map(ci => {
+      const ct=ctypes[parseInt(ci)]; const col=COLORS[ct.cidx];
+      return `<span class="legend-item"><span class="legend-swatch" style="background:${col.fill}"></span>${ct.name} (${p.ctBreakdown[ci]})</span>`;
+    }).join('');
+
+    html += `
+    <div class="pcard">
+      <div class="pcard-header">
+        <div class="pnum">Pallet ${p.idx} <span>of ${pallets.length}</span></div>
+        <span class="badge ${isPartial?'badge-partial':'badge-full'}">${isPartial?'PARTIAL':'FULL'}</span>
+        <span class="badge badge-blue" style="margin-left:4px">${p.totalBoxes} ctns</span>
+      </div>
+      <div class="pcard-views">
+        <div class="pcard-view">
+          <div class="view-label">Top View</div>
+          <canvas id="cv-top-${p.idx}"></canvas>
+        </div>
+        <div class="pcard-view" style="max-width:160px">
+          <div class="view-label">Side Elevation</div>
+          <canvas id="cv-side-${p.idx}"></canvas>
+        </div>
+      </div>
+      <div class="pcard-3d">
+        <div class="view-label">3D Perspective</div>
+        <canvas id="cv-3d-${p.idx}"></canvas>
+      </div>
+      <div class="pcard-legend">${legendItems}</div>
+      <div class="pcard-stats">
+        <div class="chip"><span class="chip-val">${p.layers.length}</span><span class="chip-label">Layers</span></div>
+        <div class="chip"><span class="chip-val">${pL}×${pW}×${p.totalH}</span><span class="chip-label">L×W×H (mm)</span></div>
+        <div class="chip"><span class="chip-val">${p.totalKg.toFixed(1)} kg</span><span class="chip-label">Gross Weight</span></div>
+        <div class="chip"><span class="chip-val">${p.cbm.toFixed(3)} m³</span><span class="chip-label">CBM</span></div>
+        <div class="chip"><span class="chip-val">${(p.totalH/maxH*100).toFixed(0)}%</span><span class="chip-label">Height Util.</span></div>
+        <div class="chip"><span class="chip-val">${(p.totalKg/maxKg*100).toFixed(0)}%</span><span class="chip-label">Weight Util.</span></div>
+      </div>
+      <div class="pcard-breakdown">${bkItems}</div>
+    </div>`;
+  });
+
+  html += `</div>`;
+
+  // Detail table
+  const perPalletRows = pallets.map(p=>`
+    <tr><td colspan="2"><strong>Pallet ${p.idx}</strong></td></tr>
+    <tr><td>Dimensions (L × W × H)</td><td>${pL} × ${pW} × ${p.totalH} mm</td></tr>
+    <tr><td>Gross Weight</td><td>${p.totalKg.toFixed(2)} kg</td></tr>
+    <tr><td>CBM</td><td>${p.cbm.toFixed(4)} m³</td></tr>
+    <tr><td>Total Cartons</td><td>${p.totalBoxes}</td></tr>
+    ${Object.entries(p.ctBreakdown).map(([ci,boxes])=>`
+      <tr><td style="padding-left:20px">${ctypes[parseInt(ci)].name}</td><td>${boxes} cartons</td></tr>
+    `).join('')}
+  `).join('');
+
+  html += `<div class="detail-card">
+    <h3>Detail Sheet</h3>
+    <table>
+      <tr><th colspan="2">Shipment</th></tr>
+      <tr><td>Shipper</td><td>${shipment.shipper||'—'}</td></tr>
+      <tr><td>Consignee</td><td>${shipment.consignee||'—'}</td></tr>
+      <tr><td>Destination</td><td>${shipment.dest||'—'}</td></tr>
+      <tr><td>Reference / PO</td><td>${shipment.ref||'—'}</td></tr>
+      <tr><th colspan="2">Pallet</th></tr>
+      <tr><td>Dimensions (L × W × H)</td><td>${pL} × ${pW} × ${pH} mm</td></tr>
+      <tr><td>Max Load</td><td>${maxKg} kg</td></tr>
+      <tr><td>Max Stack Height</td><td>${maxH} mm</td></tr>
+      <tr><th colspan="2">Carton Types</th></tr>
+      ${ctypes.filter(ct=>ct.qty>0).map((ct,i)=>`
+        <tr><td colspan="2"><span style="font-weight:700;color:${COLORS[ct.cidx].fill}">${ct.name}</span></td></tr>
+        <tr><td>Dimensions (L × W × H)</td><td>${ct.l} × ${ct.w} × ${ct.h} mm</td></tr>
+        <tr><td>Weight / Carton</td><td>${ct.kg} kg</td></tr>
+        <tr><td>Quantity</td><td>${ct.qty}</td></tr>
+        <tr><td>Layout / Layer</td><td>${ctLayouts[cartonTypes.indexOf(cartonTypes.find(c=>c.id===ct.id))]?.nx||'—'} × ${ctLayouts[cartonTypes.indexOf(cartonTypes.find(c=>c.id===ct.id))]?.ny||'—'} = ${ctLayouts[cartonTypes.indexOf(cartonTypes.find(c=>c.id===ct.id))]?.count||'—'} cartons</td></tr>
+      `).join('')}
+      <tr><th colspan="2">Per-Pallet Breakdown</th></tr>
+      ${perPalletRows}
+      <tr><th colspan="2">Totals</th></tr>
+      <tr><td>Total Pallets</td><td><strong>${pallets.length}</strong></td></tr>
+      <tr><td>Total Cartons</td><td><strong>${totalBoxes}</strong></td></tr>
+      <tr><td>Total Gross Weight</td><td><strong>${totalKg.toFixed(2)} kg</strong></td></tr>
+      <tr><td>Total CBM</td><td><strong>${totalCBM.toFixed(4)} m³</strong></td></tr>
+    </table>
+  </div>`;
+
+  document.getElementById('result').innerHTML = html;
+
+  requestAnimationFrame(() => {
+    pallets.forEach(p => {
+      drawTopView( document.getElementById(`cv-top-${p.idx}`),  p, pCfg, ctypes);
+      drawSideView(document.getElementById(`cv-side-${p.idx}`), p, pCfg, ctypes);
+      draw3DView(  document.getElementById(`cv-3d-${p.idx}`),   p, pCfg, ctypes);
+    });
+  });
+}
+
+// ─── Canvas: Top View ─────────────────────────────────────────────────────────
+
+function drawTopView(cv, pallet, pCfg, ctypes) {
+  if (!cv) return;
+  const { pL,pW,overhang,gap } = pCfg;
+  const topLayer = pallet.layers[pallet.layers.length-1];
+  const ct  = ctypes[topLayer.ci];
+  const col = COLORS[ct.cidx];
+  const lay = topLayer.lay;
+
+  const PAD=28, CVSIZE=260;
+  const maxDim = Math.max(pL+overhang*2, pW+overhang*2);
+  const scale  = (CVSIZE-PAD*2)/maxDim;
+  const drawPL=Math.round(pL*scale), drawPW=Math.round(pW*scale);
+  const oW=Math.round(overhang*scale);
+
+  cv.width  = drawPL+PAD*2+oW*2;
+  cv.height = drawPW+PAD*2+oW*2+20;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const ox=PAD+oW, oy=PAD+oW;
+
+  if (overhang>0) {
+    ctx.fillStyle='#fff8e8'; ctx.setLineDash([4,3]);
+    ctx.strokeStyle='#f7a444'; ctx.lineWidth=1;
+    ctx.fillRect(ox-oW,oy-oW,drawPL+oW*2,drawPW+oW*2);
+    ctx.strokeRect(ox-oW,oy-oW,drawPL+oW*2,drawPW+oW*2);
+    ctx.setLineDash([]);
+  }
+
+  // Pallet surface
+  ctx.fillStyle='#d4b896'; ctx.strokeStyle='#8b6914'; ctx.lineWidth=1.5;
+  ctx.fillRect(ox,oy,drawPL,drawPW); ctx.strokeRect(ox,oy,drawPL,drawPW);
+  ctx.strokeStyle='#c4a070'; ctx.lineWidth=0.5;
+  [1,2].forEach(i=>{
+    ctx.beginPath(); ctx.moveTo(ox,oy+drawPW*i/3); ctx.lineTo(ox+drawPL,oy+drawPW*i/3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ox+drawPL*i/3,oy); ctx.lineTo(ox+drawPL*i/3,oy+drawPW); ctx.stroke();
+  });
+
+  // Boxes (top layer)
+  const bL=lay.bl*scale, bW=lay.bw*scale;
+  const sL=bL+gap*scale, sW=bW+gap*scale;
+  let pos=0;
+  for (let row=0;row<lay.ny;row++) {
+    for (let col2=0;col2<lay.nx;col2++) {
+      const x=ox+col2*sL, y=oy+row*sW;
+      if (pos<topLayer.boxes) {
+        ctx.fillStyle=col.fill; ctx.globalAlpha=0.85;
+        ctx.fillRect(x+1,y+1,bL-2,bW-2);
+        ctx.globalAlpha=1;
+        ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=0.8;
+        ctx.strokeRect(x+1,y+1,bL-2,bW-2);
+      } else {
+        ctx.setLineDash([3,2]); ctx.strokeStyle='#ddd'; ctx.lineWidth=1;
+        ctx.strokeRect(x+1,y+1,bL-2,bW-2); ctx.setLineDash([]);
+      }
+      pos++;
+    }
+  }
+
+  // Labels
+  ctx.fillStyle='#555'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  ctx.fillText(`${pL} mm`,ox+drawPL/2,oy+drawPW+13);
+  ctx.save(); ctx.translate(ox-13,oy+drawPW/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText(`${pW} mm`,0,0); ctx.restore();
+
+  if (bL>30 && bW>18) {
+    ctx.font='bold 8px system-ui'; ctx.fillStyle='rgba(255,255,255,.9)'; ctx.textAlign='center';
+    ctx.fillText(`${lay.bl}×${lay.bw}`,ox+bL/2,oy+bW/2+3);
+  }
+
+  ctx.fillStyle='#555'; ctx.font='8px system-ui'; ctx.textAlign='left';
+  ctx.fillText(`Top layer: ${ct.name}${!topLayer.full?' (partial)':''}`,ox,oy+drawPW+26);
+}
+
+// ─── Canvas: Side Elevation ───────────────────────────────────────────────────
+
+function drawSideView(cv, pallet, pCfg, ctypes) {
+  if (!cv) return;
+  const { pL,pH,maxH,wrap } = pCfg;
+  const PAD=22, W=150;
+  const scale=Math.min((W-PAD*2)/pL,(W*1.7)/maxH);
+  const drawPalH=Math.round(pH*scale);
+  const drawPalW=Math.round(pL*scale);
+  const drawMaxH=Math.round(maxH*scale);
+  const H=drawMaxH+PAD*2+14;
+
+  cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const bX=PAD, bY=H-PAD;
+
+  // Max height guide
+  ctx.setLineDash([4,3]); ctx.strokeStyle='#f7a444'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(bX-6,bY-drawMaxH); ctx.lineTo(bX+drawPalW+6,bY-drawMaxH); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#f7a444'; ctx.font='8px system-ui'; ctx.textAlign='left';
+  ctx.fillText(`${maxH}mm`,bX+drawPalW+7,bY-drawMaxH+4);
+
+  // Pallet body
+  ctx.fillStyle='#c4a070'; ctx.strokeStyle='#8b6914'; ctx.lineWidth=1.5;
+  ctx.fillRect(bX,bY-drawPalH,drawPalW,drawPalH);
+  ctx.strokeRect(bX,bY-drawPalH,drawPalW,drawPalH);
+  const fw=Math.max(drawPalW/5,5);
+  ctx.fillStyle='#a0845a';
+  [[0,fw],[drawPalW/2-fw/2,fw],[drawPalW-fw,fw]].forEach(([fx,fww])=>{
+    ctx.fillRect(bX+fx,bY-drawPalH*0.45,fww,drawPalH*0.45);
+  });
+
+  // Layers bottom-up
+  let curY = bY-drawPalH-(wrap>0?Math.round(wrap*scale):0);
+  pallet.layers.forEach((layer,idx)=>{
+    const ct=ctypes[layer.ci]; const col=COLORS[ct.cidx];
+    const layH=Math.max(Math.round(ct.h*scale),4);
+    curY -= layH;
+    ctx.fillStyle=col.fill; ctx.globalAlpha=layer.full?0.88:0.5;
+    ctx.fillRect(bX+1,curY+1,drawPalW-2,layH-2);
+    ctx.globalAlpha=1;
+    ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=0.6;
+    ctx.strokeRect(bX+1,curY+1,drawPalW-2,layH-2);
+    if (!layer.full) {
+      ctx.setLineDash([3,2]); ctx.strokeStyle=col.front; ctx.lineWidth=1;
+      ctx.strokeRect(bX+1,curY+1,drawPalW-2,layH-2); ctx.setLineDash([]);
+    }
+    if (layH>11) {
+      ctx.fillStyle='rgba(255,255,255,.9)'; ctx.font='bold 7px system-ui'; ctx.textAlign='center';
+      ctx.fillText(`L${idx+1}`,bX+drawPalW/2,curY+layH/2+3);
+    }
+  });
+
+  // Height arrow
+  const topY=curY;
+  ctx.strokeStyle='#444'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(bX-10,bY); ctx.lineTo(bX-10,topY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bX-13,topY+4); ctx.lineTo(bX-10,topY); ctx.lineTo(bX-7,topY+4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bX-13,bY-4);   ctx.lineTo(bX-10,bY);   ctx.lineTo(bX-7,bY-4);   ctx.stroke();
+  ctx.fillStyle='#333'; ctx.font='8px system-ui'; ctx.textAlign='center';
+  ctx.save(); ctx.translate(bX-18,(bY+topY)/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText(`${pallet.totalH}mm`,0,0); ctx.restore();
+  ctx.fillStyle='#555'; ctx.font='9px system-ui'; ctx.textAlign='center';
+  ctx.fillText(`${pL}mm`,bX+drawPalW/2,bY+12);
+}
+
+// ─── Canvas: 3D Isometric ─────────────────────────────────────────────────────
+
+function draw3DView(cv, pallet, pCfg, ctypes) {
+  if (!cv) return;
+  const { pL,pW,pH } = pCfg;
+  const W=(cv.parentElement.offsetWidth-20)||360, H=220;
+  cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  const maxDim=Math.max(pL,pW,pallet.totalH);
+  const scale=Math.min(W/(2.2*maxDim),H/(1.4*maxDim));
+  const cx=W*0.5, cy=H*0.82;
+  const ang=Math.PI/6;
+
+  const iso=(x,y,z)=>({
+    sx:cx+(x-y)*Math.cos(ang)*scale,
+    sy:cy-z*scale-(x+y)*Math.sin(ang)*scale,
+  });
+
+  const face=(pts,fill)=>{
+    ctx.beginPath(); ctx.moveTo(pts[0].sx,pts[0].sy);
+    pts.slice(1).forEach(p=>ctx.lineTo(p.sx,p.sy));
+    ctx.closePath(); ctx.fillStyle=fill; ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.1)'; ctx.lineWidth=0.5; ctx.stroke();
+  };
+
+  const box3d=(x0,y0,z0,lx,ly,lz,cT,cF,cR)=>{
+    face([iso(x0,y0+ly,z0),iso(x0+lx,y0+ly,z0),iso(x0+lx,y0+ly,z0+lz),iso(x0,y0+ly,z0+lz)],cF);
+    face([iso(x0+lx,y0,z0),iso(x0+lx,y0+ly,z0),iso(x0+lx,y0+ly,z0+lz),iso(x0+lx,y0,z0+lz)],cR);
+    face([iso(x0,y0,z0+lz),iso(x0+lx,y0,z0+lz),iso(x0+lx,y0+ly,z0+lz),iso(x0,y0+ly,z0+lz)],cT);
+  };
+
+  // Pallet structure
+  box3d(0,0,0,pL,pW,pH*0.55,'#c4a070','#b08040','#9a7030');
+  const fw=pL*0.18,fd=pW*0.18,fh=pH*0.45;
+  [[0,0],[pL/2-fw/2,0],[pL-fw,0],[0,pW/2-fd/2],[pL/2-fw/2,pW/2-fd/2],[pL-fw,pW/2-fd/2],[0,pW-fd],[pL/2-fw/2,pW-fd],[pL-fw,pW-fd]]
+    .forEach(([fx,fy])=>box3d(fx,fy,0,fw,fd,fh,'#a07030','#906020','#805010'));
+  box3d(0,0,pH*0.55,pL,pW,pH*0.45,'#d4b896','#c4a876','#b49866');
+
+  // Carton layers
+  let zBase=pH, drawn=0, stop=false;
+  pallet.layers.forEach(layer=>{
+    if (stop) return;
+    const ct=ctypes[layer.ci]; const col=COLORS[ct.cidx];
+    const lay=layer.lay;
+    let pos=0;
+    outer: for (let row=lay.ny-1;row>=0;row--) {
+      for (let c=0;c<lay.nx;c++) {
+        if (pos>=layer.boxes||drawn>=320) { stop=true; break outer; }
+        // Slightly darken the top face for depth
+        const topColor=col.fill;
+        box3d(c*lay.bl,row*lay.bw,zBase,lay.bl,lay.bw,ct.h,topColor,col.front,col.right);
+        drawn++; pos++;
+      }
+    }
+    zBase+=ct.h;
+  });
+}
+
+// ─── Save / Modal ─────────────────────────────────────────────────────────────
+
+function openSaveModal() {
+  if (!currentResults) { alert('Please calculate a packing plan first.'); return; }
+  document.getElementById('save-modal').style.display='flex';
+  const inp=document.getElementById('save-name');
+  inp.value='';
+  setTimeout(()=>inp.focus(),60);
+}
+function closeSaveModal() { document.getElementById('save-modal').style.display='none'; }
+function handleModalBg(e) { if (e.target.id==='save-modal') closeSaveModal(); }
+
+function confirmSave() {
+  const name=document.getElementById('save-name').value.trim();
+  if (!name) { alert('Please enter a name for this plan.'); return; }
+
+  const recs=getRecords();
+  recs.unshift({
+    id:Date.now(),
+    name,
+    savedAt:new Date().toISOString(),
+    orientMode,
+    data:JSON.parse(JSON.stringify(currentResults)),
+  });
+  localStorage.setItem('palletRecords',JSON.stringify(recs));
+  closeSaveModal();
+
+  const btn=document.getElementById('btn-save');
+  const orig=btn.textContent;
+  btn.textContent='Saved ✓'; btn.style.background='#4fcf70';
+  setTimeout(()=>{ btn.textContent=orig; btn.style.background=''; },1600);
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+function exportPlan() {
+  if (!currentResults) { alert('Please calculate a packing plan first.'); return; }
+  const { pCfg, pallets, ctypes, shipment } = currentResults;
+  const { pL,pW,pH,maxH,maxKg } = pCfg;
+
+  const totalBoxes=pallets.reduce((s,p)=>s+p.totalBoxes,0);
+  const totalKg=pallets.reduce((s,p)=>s+p.totalKg,0);
+  const totalCBM=pallets.reduce((s,p)=>s+p.cbm,0);
+
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    shipment,
+    pallet: { l:pL,w:pW,h:pH,maxLoad_kg:maxKg,maxStack_mm:maxH },
+    cartonTypes: ctypes.map(ct=>({ name:ct.name,l:ct.l,w:ct.w,h:ct.h,kg:ct.kg,qty:ct.qty })),
+    summary: {
+      totalPallets:pallets.length,
+      totalCartons:totalBoxes,
+      totalGrossWeight_kg:+totalKg.toFixed(2),
+      totalCBM:+totalCBM.toFixed(4),
+    },
+    pallets: pallets.map(p=>({
+      palletNo: p.idx,
+      dimensions_mm: `${pL}×${pW}×${p.totalH}`,
+      grossWeight_kg: +p.totalKg.toFixed(2),
+      cbm: +p.cbm.toFixed(4),
+      layers: p.layers.length,
+      totalCartons: p.totalBoxes,
+      breakdown: Object.entries(p.ctBreakdown).map(([ci,boxes])=>({
+        cartonType: ctypes[parseInt(ci)].name, quantity:boxes,
+      })),
+    })),
+  };
+
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`pallet-packing-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ─── Records ──────────────────────────────────────────────────────────────────
+
+function getRecords() {
+  try { return JSON.parse(localStorage.getItem('palletRecords')||'[]'); }
+  catch { return []; }
+}
+
+function renderRecords() {
+  const recs=getRecords();
+  const el=document.getElementById('records-container');
+  if (!el) return;
+
+  if (recs.length===0) {
+    el.innerHTML=`<div class="empty-records">No saved plans yet.<br>Calculate a packing plan and click <strong>Save</strong> to store it here.</div>`;
+    return;
+  }
+
+  el.innerHTML='<div class="records-list">'+recs.map(r=>{
+    const date=new Date(r.savedAt).toLocaleString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const pallets=r.data.pallets.length;
+    const boxes=r.data.pallets.reduce((s,p)=>s+p.totalBoxes,0);
+    const cbm=r.data.pallets.reduce((s,p)=>s+p.cbm,0).toFixed(3);
+    const ctypes=r.data.ctypes;
+    const dots=ctypes.filter(ct=>ct.qty>0).map(ct=>`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[ct.cidx].fill};margin:0 1px"></span>`).join('');
+
+    return `
+    <div class="record-item">
+      <div class="rec-icon">&#x1F4E6;</div>
+      <div class="rec-info">
+        <div class="rec-name">${r.name}</div>
+        <div class="rec-meta">
+          ${date} &nbsp;·&nbsp;
+          ${pallets} pallet${pallets!==1?'s':''} &nbsp;·&nbsp;
+          ${boxes} cartons &nbsp;·&nbsp;
+          ${cbm} m³ &nbsp;·&nbsp;
+          ${dots} ${ctypes.filter(ct=>ct.qty>0).length} type${ctypes.filter(ct=>ct.qty>0).length!==1?'s':''}
+        </div>
+      </div>
+      <div class="rec-actions">
+        <button class="btn-rec btn-rec-load" onclick="loadRecord(${r.id})">Load</button>
+        <button class="btn-rec btn-rec-del"  onclick="deleteRecord(${r.id})">Delete</button>
+      </div>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+function loadRecord(id) {
+  const recs=getRecords();
+  const rec=recs.find(r=>r.id===id);
+  if (!rec) return;
+
+  const res=rec.data;
+
+  // Restore carton types
+  cartonTypes=[]; nextCID=1;
+  res.ctypes.forEach(ct=>{
+    cartonTypes.push({...ct, id:nextCID++});
+  });
+  renderCartonList();
+
+  // Restore pallet config
+  const {pCfg} = res;
+  document.getElementById('p-l').value     = pCfg.pL;
+  document.getElementById('p-w').value     = pCfg.pW;
+  document.getElementById('p-h').value     = pCfg.pH;
+  document.getElementById('p-maxh').value  = pCfg.maxH;
+  document.getElementById('p-maxkg').value = pCfg.maxKg;
+  document.getElementById('p-overhang').value = pCfg.overhang;
+  document.getElementById('gap').value     = pCfg.gap;
+  document.getElementById('wrap').value    = pCfg.wrap;
+
+  // Restore shipment
+  if (res.shipment) {
+    document.getElementById('shipper').value   = res.shipment.shipper||'';
+    document.getElementById('consignee').value = res.shipment.consignee||'';
+    document.getElementById('dest').value      = res.shipment.dest||'';
+    document.getElementById('ref').value       = res.shipment.ref||'';
+  }
+
+  // Restore orientation
+  if (rec.orientMode) setOrient(rec.orientMode);
+
+  currentResults = res;
+  document.getElementById('placeholder').style.display='none';
+  document.getElementById('result').style.display='block';
+  renderResults(res);
+  showTab('packing');
+}
+
+function deleteRecord(id) {
+  if (!confirm('Delete this saved plan? This cannot be undone.')) return;
+  localStorage.setItem('palletRecords', JSON.stringify(getRecords().filter(r=>r.id!==id)));
+  renderRecords();
+}
+</script>
+</body>
+</html>
