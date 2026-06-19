@@ -770,13 +770,13 @@ function renderResults(res) {
       <tr><td>Max Load</td><td>${maxKg} kg</td></tr>
       <tr><td>Max Stack Height</td><td>${maxH} mm</td></tr>
       <tr><th colspan="2">Carton Types</th></tr>
-      ${ctypes.filter(ct=>ct.qty>0).map((ct,i)=>`
+      ${ctypes.map((ct,i)=>{ if(!ct.qty) return ''; const lay=ctLayouts[i]; return `
         <tr><td colspan="2"><span style="font-weight:700;color:${COLORS[ct.cidx].fill}">${ct.name}</span></td></tr>
         <tr><td>Dimensions (L × W × H)</td><td>${ct.l} × ${ct.w} × ${ct.h} mm</td></tr>
         <tr><td>Weight / Carton</td><td>${ct.kg} kg</td></tr>
         <tr><td>Quantity</td><td>${ct.qty}</td></tr>
-        <tr><td>Layout / Layer</td><td>${ctLayouts[cartonTypes.indexOf(cartonTypes.find(c=>c.id===ct.id))]?.nx||'—'} × ${ctLayouts[cartonTypes.indexOf(cartonTypes.find(c=>c.id===ct.id))]?.ny||'—'} = ${ctLayouts[cartonTypes.indexOf(cartonTypes.find(c=>c.id===ct.id))]?.count||'—'} cartons</td></tr>
-      `).join('')}
+        <tr><td>Layout / Layer</td><td>${lay.nx} × ${lay.ny} = ${lay.count} cartons</td></tr>
+      `;}).join('')}
       <tr><th colspan="2">Per-Pallet Breakdown</th></tr>
       ${perPalletRows}
       <tr><th colspan="2">Totals</th></tr>
