@@ -447,7 +447,7 @@ tr:last-child td { border-bottom: none; }
 <!-- ── Records Tab ── -->
 <div id="tab-records" class="tab-content">
   <div class="records-page">
-    <h2>Saved Packing Plans</h2>
+    <h2>Saved Packing Plans <span id="db-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle"></span></h2>
     <div id="records-container"></div>
   </div>
 </div>
@@ -1008,6 +1008,65 @@ function draw3DView(cv, pallet, pCfg, ctypes) {
   });
 }
 
+// ─── Storage abstraction (Supabase primary, localStorage fallback) ────────────
+
+let _sbReady = null; // null=untested  true=ok  false=unavailable
+
+async function _checkSB() {
+  if (_sbReady !== null) return _sbReady;
+  try {
+    const { error } = await db.from('packing_records').select('id').limit(1);
+    _sbReady = !error;
+  } catch {
+    _sbReady = false;
+  }
+  return _sbReady;
+}
+
+function _localGet() {
+  try { return JSON.parse(localStorage.getItem('palletRecords') || '[]'); } catch { return []; }
+}
+function _localSet(recs) { localStorage.setItem('palletRecords', JSON.stringify(recs)); }
+
+async function storeSave(name) {
+  const payload = { name, orient_mode: orientMode, data: JSON.parse(JSON.stringify(currentResults)) };
+  if (await _checkSB()) {
+    const { error } = await db.from('packing_records').insert(payload);
+    if (!error) return 'supabase';
+    _sbReady = false; // table insert failed — downgrade to local
+  }
+  const recs = _localGet();
+  recs.unshift({ id: Date.now(), saved_at: new Date().toISOString(), ...payload });
+  _localSet(recs);
+  return 'local';
+}
+
+async function storeFetch() {
+  if (await _checkSB()) {
+    const { data, error } = await db
+      .from('packing_records').select('*').order('saved_at', { ascending: false });
+    if (!error) return { recs: data, src: 'supabase' };
+    _sbReady = false;
+  }
+  return { recs: _localGet(), src: 'local' };
+}
+
+async function storeLoad(id, src) {
+  if (src === 'supabase') {
+    const { data, error } = await db.from('packing_records').select('*').eq('id', id).single();
+    if (!error && data) return data;
+  }
+  return _localGet().find(r => r.id === id) || null;
+}
+
+async function storeDelete(id, src) {
+  if (src === 'supabase') {
+    const { error } = await db.from('packing_records').delete().eq('id', id);
+    if (!error) return;
+  }
+  _localSet(_localGet().filter(r => r.id !== id));
+}
+
 // ─── Save / Modal ─────────────────────────────────────────────────────────────
 
 function openSaveModal() {
@@ -1027,18 +1086,13 @@ async function confirmSave() {
   const btn = document.getElementById('btn-save');
   btn.textContent = 'Saving…'; btn.disabled = true;
 
-  const { error } = await db.from('packing_records').insert({
-    name,
-    orient_mode: orientMode,
-    data: JSON.parse(JSON.stringify(currentResults)),
-  });
+  const src = await storeSave(name);
 
   btn.disabled = false;
-  if (error) { alert(`Save failed: ${error.message}`); btn.textContent = 'Save'; return; }
-
   closeSaveModal();
-  btn.textContent = 'Saved ✓'; btn.style.background = '#4fcf70';
-  setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; }, 1600);
+  btn.textContent = src === 'supabase' ? 'Saved ✓' : 'Saved locally ✓';
+  btn.style.background = src === 'supabase' ? '#4fcf70' : '#f7a444';
+  setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; }, 2000);
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -1085,28 +1139,32 @@ function exportPlan() {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-// ─── Records (Supabase) ───────────────────────────────────────────────────────
+// ─── Records ──────────────────────────────────────────────────────────────────
+
+function _setBadge(src) {
+  const el = document.getElementById('db-badge');
+  if (!el) return;
+  if (src === 'supabase') {
+    el.textContent = '● Supabase'; el.style.cssText = 'background:#e6faf0;color:#1a8a50;font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle';
+  } else {
+    el.textContent = '● Local'; el.style.cssText = 'background:#fff4e6;color:#a06000;font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle';
+  }
+}
 
 async function renderRecords() {
   const el = document.getElementById('records-container');
   if (!el) return;
-
   el.innerHTML = `<div class="empty-records" style="color:#aaa">Loading&#8230;</div>`;
 
-  const { data: recs, error } = await db
-    .from('packing_records')
-    .select('id, name, saved_at, orient_mode, data')
-    .order('saved_at', { ascending: false });
-
-  if (error) {
-    el.innerHTML = `<div class="empty-records" style="color:#e85d5d">
-      Failed to load records.<br><small>${error.message}</small></div>`;
-    return;
-  }
+  const { recs, src } = await storeFetch();
+  _setBadge(src);
 
   if (!recs || recs.length === 0) {
+    const tip = src === 'local'
+      ? `<br><small style="color:#bbb">Supabase table not found — run <code>schema.sql</code> to enable cloud sync.</small>`
+      : '';
     el.innerHTML = `<div class="empty-records">No saved plans yet.<br>
-      Calculate a packing plan and click <strong>Save</strong> to store it here.</div>`;
+      Calculate a packing plan and click <strong>Save</strong> to store it here.${tip}</div>`;
     return;
   }
 
@@ -1121,6 +1179,8 @@ async function renderRecords() {
     const dots    = ctypes.filter(ct => ct.qty > 0)
       .map(ct => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[ct.cidx].fill};margin:0 1px"></span>`)
       .join('');
+    const idAttr  = JSON.stringify(r.id);
+    const srcAttr = JSON.stringify(src);
 
     return `
     <div class="record-item">
@@ -1136,30 +1196,23 @@ async function renderRecords() {
         </div>
       </div>
       <div class="rec-actions">
-        <button class="btn-rec btn-rec-load" onclick="loadRecord(${r.id})">Load</button>
-        <button class="btn-rec btn-rec-del"  onclick="deleteRecord(${r.id})">Delete</button>
+        <button class="btn-rec btn-rec-load" onclick="loadRecord(${idAttr},${srcAttr})">Load</button>
+        <button class="btn-rec btn-rec-del"  onclick="deleteRecord(${idAttr},${srcAttr})">Delete</button>
       </div>
     </div>`;
   }).join('') + '</div>';
 }
 
-async function loadRecord(id) {
-  const { data: rec, error } = await db
-    .from('packing_records')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error || !rec) { alert('Could not load record.'); return; }
+async function loadRecord(id, src) {
+  const rec = await storeLoad(id, src);
+  if (!rec) { alert('Could not load record.'); return; }
 
   const res = rec.data;
 
-  // Restore carton types
   cartonTypes = []; nextCID = 1;
   res.ctypes.forEach(ct => cartonTypes.push({ ...ct, id: nextCID++ }));
   renderCartonList();
 
-  // Restore pallet config
   const { pCfg } = res;
   document.getElementById('p-l').value        = pCfg.pL;
   document.getElementById('p-w').value        = pCfg.pW;
@@ -1170,7 +1223,6 @@ async function loadRecord(id) {
   document.getElementById('gap').value        = pCfg.gap;
   document.getElementById('wrap').value       = pCfg.wrap;
 
-  // Restore shipment
   if (res.shipment) {
     document.getElementById('shipper').value   = res.shipment.shipper   || '';
     document.getElementById('consignee').value = res.shipment.consignee || '';
@@ -1187,10 +1239,9 @@ async function loadRecord(id) {
   showTab('packing');
 }
 
-async function deleteRecord(id) {
+async function deleteRecord(id, src) {
   if (!confirm('Delete this saved plan? This cannot be undone.')) return;
-  const { error } = await db.from('packing_records').delete().eq('id', id);
-  if (error) { alert(`Delete failed: ${error.message}`); return; }
+  await storeDelete(id, src);
   renderRecords();
 }
 </script>
