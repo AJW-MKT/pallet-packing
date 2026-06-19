@@ -1179,9 +1179,6 @@ async function renderRecords() {
     const dots    = ctypes.filter(ct => ct.qty > 0)
       .map(ct => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[ct.cidx].fill};margin:0 1px"></span>`)
       .join('');
-    const idAttr  = JSON.stringify(r.id);
-    const srcAttr = JSON.stringify(src);
-
     return `
     <div class="record-item">
       <div class="rec-icon">&#x1F4E6;</div>
@@ -1196,8 +1193,8 @@ async function renderRecords() {
         </div>
       </div>
       <div class="rec-actions">
-        <button class="btn-rec btn-rec-load" onclick="loadRecord(${idAttr},${srcAttr})">Load</button>
-        <button class="btn-rec btn-rec-del"  onclick="deleteRecord(${idAttr},${srcAttr})">Delete</button>
+        <button class="btn-rec btn-rec-load" onclick="loadRecord(${r.id},'${src}')">Load</button>
+        <button class="btn-rec btn-rec-del"  onclick="deleteRecord(${r.id},'${src}')">Delete</button>
       </div>
     </div>`;
   }).join('') + '</div>';
