@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pallet Packing Planner</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -53,6 +54,21 @@ header {
 .btn-hdr-save:hover { background: #3a56d4; }
 .btn-hdr-export { background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.3); }
 .btn-hdr-export:hover { background: rgba(255,255,255,.24); }
+.export-wrap { position: relative; }
+.export-menu {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0;
+  background: #fff; border-radius: 8px; min-width: 168px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18); overflow: hidden; z-index: 300;
+}
+.export-opt {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 10px 16px;
+  border: none; background: none; text-align: left;
+  cursor: pointer; font-size: .84rem; color: #333;
+  font-family: inherit; transition: background .12s;
+}
+.export-opt:hover { background: #f5f7fb; }
+.export-opt-icon { font-size: 1rem; }
 
 /* ── Tab Content ── */
 .tab-content { display: none; }
@@ -355,7 +371,13 @@ tr:last-child td { border-bottom: none; }
     <button id="nav-records" class="nav-btn" onclick="showTab('records')">Records</button>
   </nav>
   <div class="header-actions">
-    <button class="btn-hdr btn-hdr-export" onclick="exportPlan()">Export</button>
+    <div class="export-wrap">
+      <button class="btn-hdr btn-hdr-export" onclick="toggleExportMenu(event)">Export &#9660;</button>
+      <div id="export-menu" class="export-menu">
+        <button class="export-opt" onclick="exportExcel();closeExportMenu()"><span class="export-opt-icon">&#x1F4CA;</span>Excel (.xlsx)</button>
+        <button class="export-opt" onclick="exportPDF();closeExportMenu()"><span class="export-opt-icon">&#x1F4C4;</span>PDF (Print)</button>
+      </div>
+    </div>
     <button id="btn-save" class="btn-hdr btn-hdr-save" onclick="openSaveModal()">Save</button>
   </div>
 </header>
@@ -1095,48 +1117,207 @@ async function confirmSave() {
   setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; }, 2000);
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
+// ─── Export dropdown ──────────────────────────────────────────────────────────
 
-function exportPlan() {
+function toggleExportMenu(e) {
+  e.stopPropagation();
+  const m = document.getElementById('export-menu');
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+function closeExportMenu() {
+  const m = document.getElementById('export-menu');
+  if (m) m.style.display = 'none';
+}
+document.addEventListener('click', closeExportMenu);
+
+// ─── Export: Excel ────────────────────────────────────────────────────────────
+
+function exportExcel() {
   if (!currentResults) { alert('Please calculate a packing plan first.'); return; }
   const { pCfg, pallets, ctypes, shipment } = currentResults;
-  const { pL,pW,pH,maxH,maxKg } = pCfg;
+  const { pL, pW, pH, maxH, maxKg } = pCfg;
+  const totalBoxes = pallets.reduce((s,p) => s+p.totalBoxes, 0);
+  const totalKg    = pallets.reduce((s,p) => s+p.totalKg, 0);
+  const totalCBM   = pallets.reduce((s,p) => s+p.cbm, 0);
+  const dateStr    = new Date().toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});
 
-  const totalBoxes=pallets.reduce((s,p)=>s+p.totalBoxes,0);
-  const totalKg=pallets.reduce((s,p)=>s+p.totalKg,0);
-  const totalCBM=pallets.reduce((s,p)=>s+p.cbm,0);
+  const wb = XLSX.utils.book_new();
 
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    shipment,
-    pallet: { l:pL,w:pW,h:pH,maxLoad_kg:maxKg,maxStack_mm:maxH },
-    cartonTypes: ctypes.map(ct=>({ name:ct.name,l:ct.l,w:ct.w,h:ct.h,kg:ct.kg,qty:ct.qty })),
-    summary: {
-      totalPallets:pallets.length,
-      totalCartons:totalBoxes,
-      totalGrossWeight_kg:+totalKg.toFixed(2),
-      totalCBM:+totalCBM.toFixed(4),
-    },
-    pallets: pallets.map(p=>({
-      palletNo: p.idx,
-      dimensions_mm: `${pL}×${pW}×${p.totalH}`,
-      grossWeight_kg: +p.totalKg.toFixed(2),
-      cbm: +p.cbm.toFixed(4),
-      layers: p.layers.length,
-      totalCartons: p.totalBoxes,
-      breakdown: Object.entries(p.ctBreakdown).map(([ci,boxes])=>({
-        cartonType: ctypes[parseInt(ci)].name, quantity:boxes,
-      })),
-    })),
-  };
+  // Sheet 1 — Summary
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    ['Pallet Packing Plan'],
+    [`Exported: ${dateStr}`],
+    [],
+    ['SHIPMENT', ''],
+    ['Shipper',        shipment.shipper    || '—'],
+    ['Consignee',      shipment.consignee  || '—'],
+    ['Destination',    shipment.dest       || '—'],
+    ['Reference / PO', shipment.ref        || '—'],
+    [],
+    ['PALLET', ''],
+    ['Dimensions L×W×H (mm)', `${pL} × ${pW} × ${pH}`],
+    ['Max Load (kg)',          maxKg],
+    ['Max Stack Height (mm)',  maxH],
+    [],
+    ['TOTALS', ''],
+    ['Total Pallets',           pallets.length],
+    ['Total Cartons',           totalBoxes],
+    ['Total Gross Weight (kg)', +totalKg.toFixed(2)],
+    ['Total CBM (m³)',          +totalCBM.toFixed(4)],
+  ]);
+  ws1['!cols'] = [{wch:28},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
 
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=`pallet-packing-${new Date().toISOString().slice(0,10)}.json`;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  // Sheet 2 — Pallets
+  const palletRows = [
+    ['Pallet','Status','L (mm)','W (mm)','H (mm)','Layers','Cartons','Gross Wt (kg)','CBM (m³)','Ht Util %','Wt Util %'],
+  ];
+  pallets.forEach(p => palletRows.push([
+    p.idx,
+    p.layers.some(l=>!l.full) ? 'Partial' : 'Full',
+    pL, pW, p.totalH,
+    p.layers.length,
+    p.totalBoxes,
+    +p.totalKg.toFixed(2),
+    +p.cbm.toFixed(4),
+    +(p.totalH/maxH*100).toFixed(1),
+    +(p.totalKg/maxKg*100).toFixed(1),
+  ]));
+  palletRows.push([], ['CARTON BREAKDOWN PER PALLET'], ['Pallet','Carton Type','Qty']);
+  pallets.forEach(p =>
+    Object.entries(p.ctBreakdown).forEach(([ci,boxes]) =>
+      palletRows.push([p.idx, ctypes[+ci].name, boxes])
+    )
+  );
+  const ws2 = XLSX.utils.aoa_to_sheet(palletRows);
+  ws2['!cols'] = [{wch:8},{wch:10},{wch:9},{wch:9},{wch:9},{wch:8},{wch:9},{wch:15},{wch:12},{wch:11},{wch:11}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Pallets');
+
+  // Sheet 3 — Carton Types
+  const ctRows = [['Name','L (mm)','W (mm)','H (mm)','Weight (kg)','Qty','CBM/Carton (m³)']];
+  ctypes.filter(ct=>ct.qty>0).forEach(ct =>
+    ctRows.push([ct.name, ct.l, ct.w, ct.h, ct.kg, ct.qty,
+      +((ct.l/1000)*(ct.w/1000)*(ct.h/1000)).toFixed(6)])
+  );
+  const ws3 = XLSX.utils.aoa_to_sheet(ctRows);
+  ws3['!cols'] = [{wch:16},{wch:9},{wch:9},{wch:9},{wch:13},{wch:7},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Carton Types');
+
+  XLSX.writeFile(wb, `pallet-packing-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ─── Export: PDF ──────────────────────────────────────────────────────────────
+
+function exportPDF() {
+  if (!currentResults) { alert('Please calculate a packing plan first.'); return; }
+  const { pCfg, pallets, ctypes, shipment } = currentResults;
+  const { pL, pW, pH, maxH, maxKg } = pCfg;
+  const totalBoxes = pallets.reduce((s,p) => s+p.totalBoxes, 0);
+  const totalKg    = pallets.reduce((s,p) => s+p.totalKg, 0);
+  const totalCBM   = pallets.reduce((s,p) => s+p.cbm, 0);
+  const dateStr    = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  const shipRows = [
+    shipment.shipper    ? `<tr><td>Shipper</td><td>${shipment.shipper}</td></tr>`    : '',
+    shipment.consignee  ? `<tr><td>Consignee</td><td>${shipment.consignee}</td></tr>` : '',
+    shipment.dest       ? `<tr><td>Destination</td><td>${shipment.dest}</td></tr>`   : '',
+    shipment.ref        ? `<tr><td>Reference / PO</td><td>${shipment.ref}</td></tr>` : '',
+  ].filter(Boolean).join('');
+
+  const ctypeRows = ctypes.filter(ct=>ct.qty>0).map(ct => {
+    const col = COLORS[ct.cidx];
+    return `<tr>
+      <td><span style="display:inline-flex;align-items:center;gap:6px">
+        <span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${col.fill}"></span>
+        <strong>${ct.name}</strong></span></td>
+      <td>${ct.l} × ${ct.w} × ${ct.h}</td>
+      <td>${ct.kg}</td>
+      <td>${ct.qty}</td>
+      <td>${((ct.l/1000)*(ct.w/1000)*(ct.h/1000)).toFixed(6)}</td>
+    </tr>`;
+  }).join('');
+
+  const palletRows = pallets.map(p => {
+    const partial = p.layers.some(l=>!l.full);
+    const bk = Object.entries(p.ctBreakdown)
+      .map(([ci,n]) => `<span style="display:inline-flex;align-items:center;gap:4px">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${COLORS[ctypes[+ci].cidx].fill}"></span>${ctypes[+ci].name}: ${n}
+      </span>`).join(' &nbsp; ');
+    return `<tr>
+      <td><strong>Pallet ${p.idx}</strong></td>
+      <td><span style="padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;
+        background:${partial?'#fff0d0':'#e0f8ec'};color:${partial?'#a06000':'#1a7a40'}">
+        ${partial?'Partial':'Full'}</span></td>
+      <td>${pL} × ${pW} × ${p.totalH}</td>
+      <td>${p.totalKg.toFixed(2)}</td>
+      <td>${p.cbm.toFixed(4)}</td>
+      <td>${p.layers.length}</td>
+      <td>${p.totalBoxes}</td>
+      <td style="font-size:11px;line-height:1.6">${bk}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Pallet Packing Plan</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;color:#1a1a2e;padding:24px 28px}
+h1{font-size:19px;color:#1a2340;font-weight:800}
+.sub{font-size:12px;color:#888;margin-top:3px;margin-bottom:22px}
+.section{margin-bottom:20px}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#7a8aaa;border-bottom:1px solid #e4e4e4;padding-bottom:5px;margin-bottom:10px}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.stat{background:#f5f7fb;border-radius:7px;padding:10px 13px;border-left:3px solid #4f6ef7}
+.stat-val{font-size:17px;font-weight:800;color:#1a2340;line-height:1}
+.stat-lbl{font-size:10px;color:#888;margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#1a2340;color:#fff;padding:7px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.03em}
+td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:#fafbff}
+.kv td:first-child{font-weight:600;color:#555;width:40%}
+.print-btn{padding:8px 20px;background:#1a2340;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:.02em}
+@media print{@page{margin:14mm}body{padding:0}.print-btn{display:none}thead{display:table-header-group}}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+  <div><h1>Pallet Packing Plan</h1><div class="sub">Exported ${dateStr}</div></div>
+  <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+</div>
+
+${shipRows ? `<div class="section"><div class="sec-title">Shipment</div><table class="kv">${shipRows}</table></div>` : ''}
+
+<div class="stat-row">
+  <div class="stat"><div class="stat-val">${pallets.length}</div><div class="stat-lbl">Total Pallets</div></div>
+  <div class="stat"><div class="stat-val">${totalBoxes}</div><div class="stat-lbl">Total Cartons</div></div>
+  <div class="stat"><div class="stat-val">${totalKg.toFixed(1)} kg</div><div class="stat-lbl">Total Gross Weight</div></div>
+  <div class="stat"><div class="stat-val">${totalCBM.toFixed(3)} m³</div><div class="stat-lbl">Total CBM</div></div>
+</div>
+
+<div class="section"><div class="sec-title">Pallet Specification</div>
+<table class="kv">
+  <tr><td>Dimensions (L × W × H)</td><td>${pL} × ${pW} × ${pH} mm</td></tr>
+  <tr><td>Max Load</td><td>${maxKg} kg</td></tr>
+  <tr><td>Max Stack Height</td><td>${maxH} mm</td></tr>
+</table></div>
+
+<div class="section"><div class="sec-title">Carton Types</div>
+<table>
+  <thead><tr><th>Name</th><th>L×W×H (mm)</th><th>Weight (kg)</th><th>Qty</th><th>CBM/Carton (m³)</th></tr></thead>
+  <tbody>${ctypeRows}</tbody>
+</table></div>
+
+<div class="section"><div class="sec-title">Per-Pallet Breakdown</div>
+<table>
+  <thead><tr><th>Pallet</th><th>Status</th><th>L×W×H (mm)</th><th>Gross Wt (kg)</th><th>CBM (m³)</th><th>Layers</th><th>Cartons</th><th>Breakdown</th></tr></thead>
+  <tbody>${palletRows}</tbody>
+</table></div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Pop-up blocked — please allow pop-ups for this site and try again.'); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 350);
 }
 
 // ─── Records ──────────────────────────────────────────────────────────────────
