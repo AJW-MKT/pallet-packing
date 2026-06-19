@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pallet Packing Planner</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -452,6 +453,12 @@ tr:last-child td { border-bottom: none; }
 </div>
 
 <script>
+// ─── Supabase ─────────────────────────────────────────────────────────────────
+
+const _SB_URL = 'https://ooxyajipnzocspehufnv.supabase.co';
+const _SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9veHlhamlwbnpvY3NwZWh1Zm52Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4Mzg0MjAsImV4cCI6MjA5NzQxNDQyMH0.ZGHzYNTV4ByNUyenQe2hvvH3X_4A5J-nCyJpVUuBpbg';
+const db = window.supabase.createClient(_SB_URL, _SB_KEY);
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const COLORS = [
@@ -1013,25 +1020,25 @@ function openSaveModal() {
 function closeSaveModal() { document.getElementById('save-modal').style.display='none'; }
 function handleModalBg(e) { if (e.target.id==='save-modal') closeSaveModal(); }
 
-function confirmSave() {
-  const name=document.getElementById('save-name').value.trim();
+async function confirmSave() {
+  const name = document.getElementById('save-name').value.trim();
   if (!name) { alert('Please enter a name for this plan.'); return; }
 
-  const recs=getRecords();
-  recs.unshift({
-    id:Date.now(),
-    name,
-    savedAt:new Date().toISOString(),
-    orientMode,
-    data:JSON.parse(JSON.stringify(currentResults)),
-  });
-  localStorage.setItem('palletRecords',JSON.stringify(recs));
-  closeSaveModal();
+  const btn = document.getElementById('btn-save');
+  btn.textContent = 'Saving…'; btn.disabled = true;
 
-  const btn=document.getElementById('btn-save');
-  const orig=btn.textContent;
-  btn.textContent='Saved ✓'; btn.style.background='#4fcf70';
-  setTimeout(()=>{ btn.textContent=orig; btn.style.background=''; },1600);
+  const { error } = await db.from('packing_records').insert({
+    name,
+    orient_mode: orientMode,
+    data: JSON.parse(JSON.stringify(currentResults)),
+  });
+
+  btn.disabled = false;
+  if (error) { alert(`Save failed: ${error.message}`); btn.textContent = 'Save'; return; }
+
+  closeSaveModal();
+  btn.textContent = 'Saved ✓'; btn.style.background = '#4fcf70';
+  setTimeout(() => { btn.textContent = 'Save'; btn.style.background = ''; }, 1600);
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -1078,30 +1085,42 @@ function exportPlan() {
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-// ─── Records ──────────────────────────────────────────────────────────────────
+// ─── Records (Supabase) ───────────────────────────────────────────────────────
 
-function getRecords() {
-  try { return JSON.parse(localStorage.getItem('palletRecords')||'[]'); }
-  catch { return []; }
-}
-
-function renderRecords() {
-  const recs=getRecords();
-  const el=document.getElementById('records-container');
+async function renderRecords() {
+  const el = document.getElementById('records-container');
   if (!el) return;
 
-  if (recs.length===0) {
-    el.innerHTML=`<div class="empty-records">No saved plans yet.<br>Calculate a packing plan and click <strong>Save</strong> to store it here.</div>`;
+  el.innerHTML = `<div class="empty-records" style="color:#aaa">Loading&#8230;</div>`;
+
+  const { data: recs, error } = await db
+    .from('packing_records')
+    .select('id, name, saved_at, orient_mode, data')
+    .order('saved_at', { ascending: false });
+
+  if (error) {
+    el.innerHTML = `<div class="empty-records" style="color:#e85d5d">
+      Failed to load records.<br><small>${error.message}</small></div>`;
     return;
   }
 
-  el.innerHTML='<div class="records-list">'+recs.map(r=>{
-    const date=new Date(r.savedAt).toLocaleString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    const pallets=r.data.pallets.length;
-    const boxes=r.data.pallets.reduce((s,p)=>s+p.totalBoxes,0);
-    const cbm=r.data.pallets.reduce((s,p)=>s+p.cbm,0).toFixed(3);
-    const ctypes=r.data.ctypes;
-    const dots=ctypes.filter(ct=>ct.qty>0).map(ct=>`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[ct.cidx].fill};margin:0 1px"></span>`).join('');
+  if (!recs || recs.length === 0) {
+    el.innerHTML = `<div class="empty-records">No saved plans yet.<br>
+      Calculate a packing plan and click <strong>Save</strong> to store it here.</div>`;
+    return;
+  }
+
+  el.innerHTML = '<div class="records-list">' + recs.map(r => {
+    const date = new Date(r.saved_at).toLocaleString('en-US', {
+      year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit',
+    });
+    const pallets = r.data.pallets.length;
+    const boxes   = r.data.pallets.reduce((s, p) => s + p.totalBoxes, 0);
+    const cbm     = r.data.pallets.reduce((s, p) => s + p.cbm, 0).toFixed(3);
+    const ctypes  = r.data.ctypes;
+    const dots    = ctypes.filter(ct => ct.qty > 0)
+      .map(ct => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLORS[ct.cidx].fill};margin:0 1px"></span>`)
+      .join('');
 
     return `
     <div class="record-item">
@@ -1110,10 +1129,10 @@ function renderRecords() {
         <div class="rec-name">${r.name}</div>
         <div class="rec-meta">
           ${date} &nbsp;·&nbsp;
-          ${pallets} pallet${pallets!==1?'s':''} &nbsp;·&nbsp;
+          ${pallets} pallet${pallets !== 1 ? 's' : ''} &nbsp;·&nbsp;
           ${boxes} cartons &nbsp;·&nbsp;
           ${cbm} m³ &nbsp;·&nbsp;
-          ${dots} ${ctypes.filter(ct=>ct.qty>0).length} type${ctypes.filter(ct=>ct.qty>0).length!==1?'s':''}
+          ${dots} ${ctypes.filter(ct => ct.qty > 0).length} type${ctypes.filter(ct => ct.qty > 0).length !== 1 ? 's' : ''}
         </div>
       </div>
       <div class="rec-actions">
@@ -1121,55 +1140,57 @@ function renderRecords() {
         <button class="btn-rec btn-rec-del"  onclick="deleteRecord(${r.id})">Delete</button>
       </div>
     </div>`;
-  }).join('')+'</div>';
+  }).join('') + '</div>';
 }
 
-function loadRecord(id) {
-  const recs=getRecords();
-  const rec=recs.find(r=>r.id===id);
-  if (!rec) return;
+async function loadRecord(id) {
+  const { data: rec, error } = await db
+    .from('packing_records')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-  const res=rec.data;
+  if (error || !rec) { alert('Could not load record.'); return; }
+
+  const res = rec.data;
 
   // Restore carton types
-  cartonTypes=[]; nextCID=1;
-  res.ctypes.forEach(ct=>{
-    cartonTypes.push({...ct, id:nextCID++});
-  });
+  cartonTypes = []; nextCID = 1;
+  res.ctypes.forEach(ct => cartonTypes.push({ ...ct, id: nextCID++ }));
   renderCartonList();
 
   // Restore pallet config
-  const {pCfg} = res;
-  document.getElementById('p-l').value     = pCfg.pL;
-  document.getElementById('p-w').value     = pCfg.pW;
-  document.getElementById('p-h').value     = pCfg.pH;
-  document.getElementById('p-maxh').value  = pCfg.maxH;
-  document.getElementById('p-maxkg').value = pCfg.maxKg;
+  const { pCfg } = res;
+  document.getElementById('p-l').value        = pCfg.pL;
+  document.getElementById('p-w').value        = pCfg.pW;
+  document.getElementById('p-h').value        = pCfg.pH;
+  document.getElementById('p-maxh').value     = pCfg.maxH;
+  document.getElementById('p-maxkg').value    = pCfg.maxKg;
   document.getElementById('p-overhang').value = pCfg.overhang;
-  document.getElementById('gap').value     = pCfg.gap;
-  document.getElementById('wrap').value    = pCfg.wrap;
+  document.getElementById('gap').value        = pCfg.gap;
+  document.getElementById('wrap').value       = pCfg.wrap;
 
   // Restore shipment
   if (res.shipment) {
-    document.getElementById('shipper').value   = res.shipment.shipper||'';
-    document.getElementById('consignee').value = res.shipment.consignee||'';
-    document.getElementById('dest').value      = res.shipment.dest||'';
-    document.getElementById('ref').value       = res.shipment.ref||'';
+    document.getElementById('shipper').value   = res.shipment.shipper   || '';
+    document.getElementById('consignee').value = res.shipment.consignee || '';
+    document.getElementById('dest').value      = res.shipment.dest      || '';
+    document.getElementById('ref').value       = res.shipment.ref       || '';
   }
 
-  // Restore orientation
-  if (rec.orientMode) setOrient(rec.orientMode);
+  if (rec.orient_mode) setOrient(rec.orient_mode);
 
   currentResults = res;
-  document.getElementById('placeholder').style.display='none';
-  document.getElementById('result').style.display='block';
+  document.getElementById('placeholder').style.display = 'none';
+  document.getElementById('result').style.display      = 'block';
   renderResults(res);
   showTab('packing');
 }
 
-function deleteRecord(id) {
+async function deleteRecord(id) {
   if (!confirm('Delete this saved plan? This cannot be undone.')) return;
-  localStorage.setItem('palletRecords', JSON.stringify(getRecords().filter(r=>r.id!==id)));
+  const { error } = await db.from('packing_records').delete().eq('id', id);
+  if (error) { alert(`Delete failed: ${error.message}`); return; }
   renderRecords();
 }
 </script>
